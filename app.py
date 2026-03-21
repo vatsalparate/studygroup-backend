@@ -44,6 +44,8 @@ socketio = SocketIO(app,
                     manage_session=False)
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+with app.app_context():
+    db.create_all()
 
 
 # ── Helpers ──────────────────────────────────────
