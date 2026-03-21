@@ -44,8 +44,6 @@ socketio = SocketIO(app,
                     manage_session=False)
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-with app.app_context():
-    db.create_all()
 
 
 # ── Helpers ──────────────────────────────────────
@@ -125,6 +123,11 @@ class Message(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+# Create all tables after models are defined
+with app.app_context():
+    db.create_all()
+
+
 # ── Routes ───────────────────────────────────────
 
 @app.route('/')
@@ -202,17 +205,20 @@ def create_group():
 
 @app.route('/groups', methods=['GET'])
 def get_groups():
-    groups = Group.query.all()
-    result = []
-    for g in groups:
-        count = GroupMember.query.filter_by(group_id=g.id).count()
-        result.append({
-            'id': g.id,
-            'name': g.name,
-            'description': g.description or '',
-            'member_count': count
-        })
-    return jsonify(result)
+    try:
+        groups = Group.query.all()
+        result = []
+        for g in groups:
+            count = GroupMember.query.filter_by(group_id=g.id).count()
+            result.append({
+                'id': g.id,
+                'name': g.name,
+                'description': g.description or '',
+                'member_count': count
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/join-group', methods=['POST'])
 def join_group():
@@ -365,6 +371,4 @@ def not_allowed(e):
 # ── Run ──────────────────────────────────────────
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     socketio.run(app, host='0.0.0.0', port=5000, debug=False)
