@@ -1,5 +1,7 @@
+import eventlet
+eventlet.monkey_patch()
+
 import os
-import secrets
 from datetime import datetime
 
 from flask import Flask, request, jsonify, session
@@ -10,16 +12,12 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-@app.after_request
-def after_request(response):
-    response.headers['ngrok-skip-browser-warning'] = 'true'
-    return response
 
 app.config['SECRET_KEY'] = 'studygroup_secret_key_2024_xk92'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///study.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 UPLOAD_FOLDER = 'uploads'
@@ -46,16 +44,6 @@ socketio = SocketIO(app,
                     manage_session=False)
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-
-@app.after_request
-def after_request(response):
-    response.headers['Access-Control-Allow-Origin'] = 'https://glowing-fudge-cfba84.netlify.app'
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    response.headers['ngrok-skip-browser-warning'] = 'true'
-    return response
 
 
 # ── Helpers ──────────────────────────────────────
@@ -119,20 +107,20 @@ class StudySession(db.Model):
 
 class Note(db.Model):
     __tablename__ = 'notes'
-    id           = db.Column(db.Integer, primary_key=True)
-    group_id     = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
-    uploaded_by  = db.Column(db.Integer, db.ForeignKey('users.id'),  nullable=False)
-    filename     = db.Column(db.String(200), nullable=False)
-    original_name= db.Column(db.String(200))
-    uploaded_at  = db.Column(db.DateTime, default=datetime.utcnow)
+    id            = db.Column(db.Integer, primary_key=True)
+    group_id      = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
+    uploaded_by   = db.Column(db.Integer, db.ForeignKey('users.id'),  nullable=False)
+    filename      = db.Column(db.String(200), nullable=False)
+    original_name = db.Column(db.String(200))
+    uploaded_at   = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Message(db.Model):
     __tablename__ = 'messages'
-    id       = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
-    user_id  = db.Column(db.Integer, db.ForeignKey('users.id'),  nullable=False)
-    message  = db.Column(db.String(2000), nullable=False)
-    timestamp= db.Column(db.DateTime, default=datetime.utcnow)
+    id        = db.Column(db.Integer, primary_key=True)
+    group_id  = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
+    user_id   = db.Column(db.Integer, db.ForeignKey('users.id'),  nullable=False)
+    message   = db.Column(db.String(2000), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 # ── Routes ───────────────────────────────────────
