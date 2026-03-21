@@ -3,22 +3,21 @@ eventlet.monkey_patch()
 
 import os
 from datetime import datetime
+from functools import wraps
 
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_socketio import SocketIO, send, join_room
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+import jwt as pyjwt
 
 app = Flask(__name__)
 
 app.config['SECRET_KEY'] = 'studygroup_secret_key_2024_xk92'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///study.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-app.config['SESSION_COOKIE_SECURE'] = True
-app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'txt', 'md', 'docx'}
@@ -34,29 +33,55 @@ ALLOWED_ORIGINS = [
 CORS(app,
      supports_credentials=True,
      origins=ALLOWED_ORIGINS,
-     allow_headers=['Content-Type'],
+     allow_headers=['Content-Type', 'Authorization'],
      methods=['GET', 'POST', 'OPTIONS'])
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
-socketio = SocketIO(app,
-                    cors_allowed_origins=ALLOWED_ORIGINS,
-                    manage_session=False)
+socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-# ── Helpers ──────────────────────────────────────
+# ── JWT Helpers ───────────────────────────────────
+
+def create_token(user_id):
+    return pyjwt.encode(
+        {'user_id': user_id},
+        app.config['SECRET_KEY'],
+        algorithm='HS256'
+    )
+
+def get_user_from_token():
+    auth = request.headers.get('Authorization', '')
+    if not auth.startswith('Bearer '):
+        return None
+    token = auth[7:]
+    try:
+        data = pyjwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        return data.get('user_id')
+    except:
+        return None
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user_id = get_user_from_token()
+        if not user_id:
+            return jsonify({'msg': 'Login required.'}), 401
+        request.user_id = user_id
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ── Other Helpers ─────────────────────────────────
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def is_logged_in():
-    return 'user_id' in session
-
-def is_group_member(group_id):
+def is_group_member(user_id, group_id):
     return GroupMember.query.filter_by(
-        user_id=session['user_id'], group_id=group_id
+        user_id=user_id, group_id=group_id
     ).first() is not None
 
 def err(msg, status):
@@ -165,30 +190,24 @@ def login():
     user = User.query.filter_by(email=email).first()
     if not user or not bcrypt.check_password_hash(user.password, password):
         return err('Invalid email or password.', 401)
-    session.clear()
-    session['user_id'] = user.id
-    session.permanent = True
-    return ok('Login successful.', user_id=user.id, name=user.name)
+    token = create_token(user.id)
+    return ok('Login successful.', token=token, user_id=user.id, name=user.name)
 
 @app.route('/logout', methods=['POST'])
 def logout():
-    session.clear()
     return ok('Logged out.')
 
 @app.route('/me', methods=['GET'])
+@login_required
 def me():
-    if not is_logged_in():
-        return err('Not authenticated.', 401)
-    user = db.session.get(User, session['user_id'])
+    user = db.session.get(User, request.user_id)
     if not user:
-        session.clear()
         return err('User not found.', 404)
     return jsonify({'user_id': user.id, 'name': user.name, 'email': user.email})
 
 @app.route('/create-group', methods=['POST'])
+@login_required
 def create_group():
-    if not is_logged_in():
-        return err('Login required.', 401)
     data = request.get_json(silent=True)
     if not data:
         return err('Invalid JSON.', 400)
@@ -196,10 +215,10 @@ def create_group():
     if not name:
         return err('Group name required.', 400)
     description = (data.get('description') or '').strip()
-    group = Group(name=name, description=description, created_by=session['user_id'])
+    group = Group(name=name, description=description, created_by=request.user_id)
     db.session.add(group)
     db.session.flush()
-    db.session.add(GroupMember(user_id=session['user_id'], group_id=group.id))
+    db.session.add(GroupMember(user_id=request.user_id, group_id=group.id))
     db.session.commit()
     return ok('Group created.', group_id=group.id)
 
@@ -221,31 +240,29 @@ def get_groups():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/join-group', methods=['POST'])
+@login_required
 def join_group():
-    if not is_logged_in():
-        return err('Login required.', 401)
     data = request.get_json(silent=True)
     group_id = data.get('group_id') if data else None
     if not group_id:
         return err('group_id required.', 400)
     if not db.session.get(Group, group_id):
         return err('Group not found.', 404)
-    if GroupMember.query.filter_by(user_id=session['user_id'], group_id=group_id).first():
+    if GroupMember.query.filter_by(user_id=request.user_id, group_id=group_id).first():
         return err('Already a member.', 409)
-    db.session.add(GroupMember(user_id=session['user_id'], group_id=group_id))
+    db.session.add(GroupMember(user_id=request.user_id, group_id=group_id))
     db.session.commit()
     return ok('Joined group.')
 
 @app.route('/leave-group', methods=['POST'])
+@login_required
 def leave_group():
-    if not is_logged_in():
-        return err('Login required.', 401)
     data = request.get_json(silent=True)
     group_id = data.get('group_id') if data else None
     if not group_id:
         return err('group_id required.', 400)
     deleted = GroupMember.query.filter_by(
-        user_id=session['user_id'], group_id=group_id
+        user_id=request.user_id, group_id=group_id
     ).delete()
     db.session.commit()
     if not deleted:
@@ -253,9 +270,8 @@ def leave_group():
     return ok('Left group.')
 
 @app.route('/schedule-session', methods=['POST'])
+@login_required
 def schedule_session():
-    if not is_logged_in():
-        return err('Login required.', 401)
     data = request.get_json(silent=True)
     if not data:
         return err('Invalid JSON.', 400)
@@ -267,7 +283,7 @@ def schedule_session():
         return err('group_id, title, date, time required.', 400)
     if not db.session.get(Group, group_id):
         return err('Group not found.', 404)
-    if not is_group_member(group_id):
+    if not is_group_member(request.user_id, group_id):
         return err('Must be a group member.', 403)
     s = StudySession(
         group_id=group_id, title=title, date=date, time=time,
@@ -289,9 +305,8 @@ def get_sessions(group_id):
     } for s in sessions])
 
 @app.route('/upload-note', methods=['POST'])
+@login_required
 def upload_note():
-    if not is_logged_in():
-        return err('Login required.', 401)
     file     = request.files.get('file')
     group_id = request.form.get('group_id', type=int)
     if not file or not file.filename:
@@ -300,7 +315,7 @@ def upload_note():
         return err('group_id required.', 400)
     if not db.session.get(Group, group_id):
         return err('Group not found.', 404)
-    if not is_group_member(group_id):
+    if not is_group_member(request.user_id, group_id):
         return err('Must be a group member.', 403)
     if not allowed_file(file.filename):
         return err('File type not allowed.', 400)
@@ -309,7 +324,7 @@ def upload_note():
     unique_name   = str(int(datetime.utcnow().timestamp())) + '_' + safe_name
     file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_name))
     db.session.add(Note(
-        group_id=group_id, uploaded_by=session['user_id'],
+        group_id=group_id, uploaded_by=request.user_id,
         filename=unique_name, original_name=original_name
     ))
     db.session.commit()
