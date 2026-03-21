@@ -27,16 +27,22 @@ ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'txt', 'md', 'docx'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
+ALLOWED_ORIGINS = [
+    'http://127.0.0.1:5500',
+    'http://localhost:5500',
+    'https://glowing-fudge-cfba84.netlify.app'
+]
+
 CORS(app,
      supports_credentials=True,
-     origins=['http://127.0.0.1:5500', 'http://localhost:5500'],
+     origins=ALLOWED_ORIGINS,
      allow_headers=['Content-Type'],
      methods=['GET', 'POST', 'OPTIONS'])
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 socketio = SocketIO(app,
-                    cors_allowed_origins=['http://127.0.0.1:5500', 'http://localhost:5500','https://33f5-2402-e280-3e9c-24e-a8b3-ee3c-e442-7bd6.ngrok-free.app'],
+                    cors_allowed_origins=ALLOWED_ORIGINS,
                     manage_session=False)
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
