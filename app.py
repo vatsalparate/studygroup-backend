@@ -50,12 +50,11 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @app.after_request
 def after_request(response):
-    origin = request.headers.get('Origin', '')
-    if origin in ['http://127.0.0.1:5500', 'http://localhost:5500']:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Origin'] = 'https://glowing-fudge-cfba84.netlify.app'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['ngrok-skip-browser-warning'] = 'true'
     return response
 
 
