@@ -1,0 +1,8 @@
+flask
+flask-sqlalchemy
+flask-bcrypt
+flask-socketio
+flask-cors
+gunicorn
+eventlet
+werkzeug
