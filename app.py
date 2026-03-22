@@ -27,7 +27,6 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 ALLOWED_ORIGINS = [
     'http://127.0.0.1:5500',
     'http://localhost:5500',
-    'https://glowing-fudge-cfba84.netlify.app'
     'https://studygroup-vatsal.netlify.app'
 ]
 
