@@ -11,6 +11,7 @@ from flask_bcrypt import Bcrypt
 from flask_socketio import SocketIO, send, join_room
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+from flask import Flask, request, jsonify, send_from_directory
 import jwt as pyjwt
 
 app = Flask(__name__)
@@ -341,6 +342,18 @@ def get_notes(group_id):
         'uploaded_at': n.uploaded_at.isoformat() if n.uploaded_at else None
     } for n in notes])
 
+
+@app.route('/download/<int:note_id>', methods=['GET'])
+def download_note(note_id):
+    note = db.session.get(Note, note_id)
+    if not note:
+        return err('File not found.', 404)
+    return send_from_directory(
+        app.config['UPLOAD_FOLDER'],
+        note.filename,
+        as_attachment=True,
+        download_name=note.original_name
+    )
 
 # ── WebSocket ────────────────────────────────────
 
