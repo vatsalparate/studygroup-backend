@@ -4,6 +4,8 @@ eventlet.monkey_patch()
 import os
 from datetime import datetime
 from functools import wraps
+import cloudinary
+import cloudinary.uploader
 
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
@@ -15,6 +17,12 @@ from flask import Flask, request, jsonify, send_from_directory
 import jwt as pyjwt
 
 app = Flask(__name__)
+
+cloudinary.config(
+    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    api_key    = os.environ.get('CLOUDINARY_API_KEY'),
+    api_secret = os.environ.get('CLOUDINARY_API_SECRET')
+)
 
 app.config['SECRET_KEY'] = 'studygroup_secret_key_2024_xk92'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///study.db'
@@ -331,13 +339,19 @@ def upload_note():
         return err('Must be a group member.', 403)
     if not allowed_file(file.filename):
         return err('File type not allowed.', 400)
-    original_name = file.filename
-    safe_name     = secure_filename(original_name)
-    unique_name   = str(int(datetime.utcnow().timestamp())) + '_' + safe_name
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_name))
+
+    # Upload to Cloudinary
+    result = cloudinary.uploader.upload(
+        file,
+        resource_type='auto',
+        folder='studygroup'
+    )
+
     db.session.add(Note(
-        group_id=group_id, uploaded_by=request.user_id,
-        filename=unique_name, original_name=original_name
+        group_id=group_id,
+        uploaded_by=request.user_id,
+        filename=result['secure_url'],
+        original_name=file.filename
     ))
     db.session.commit()
     return ok('File uploaded.')
@@ -350,6 +364,7 @@ def get_notes(group_id):
     return jsonify([{
         'id': n.id,
         'filename': n.original_name,
+        'url': n.filename,
         'uploaded_at': n.uploaded_at.isoformat() if n.uploaded_at else None
     } for n in notes])
 
