@@ -369,17 +369,7 @@ def get_notes(group_id):
     } for n in notes])
 
 
-@app.route('/download/<int:note_id>', methods=['GET'])
-def download_note(note_id):
-    note = db.session.get(Note, note_id)
-    if not note:
-        return err('File not found.', 404)
-    return send_from_directory(
-        app.config['UPLOAD_FOLDER'],
-        note.filename,
-        as_attachment=True,
-        download_name=note.original_name
-    )
+
 
 # ── WebSocket ────────────────────────────────────
 
@@ -425,4 +415,4 @@ def not_allowed(e):
 # ── Run ──────────────────────────────────────────
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True,use_reloader=False)
